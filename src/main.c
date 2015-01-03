@@ -1,7 +1,9 @@
 #include "duv.h"
 #include "misc.h"
+#include <unistd.h>
 
 static uv_loop_t loop;
+static char *bootstrap = NULL;
 
 // Sync readfile using libuv APIs as an API function.
 static duk_ret_t duv_loadfile(duk_context *ctx) {
@@ -378,7 +380,6 @@ static duk_ret_t duv_mod_compile(duk_context *ctx) {
 }
 
 static duk_ret_t duv_main(duk_context *ctx) {
-
   duk_push_global_object(ctx);
   duk_dup(ctx, -1);
   duk_put_prop_string(ctx, -2, "global");
@@ -411,6 +412,11 @@ static duk_ret_t duv_main(duk_context *ctx) {
   duk_push_c_function(ctx, duv_loadfile, 1);
   duk_put_prop_string(ctx, -2, "loadFile");
 
+  if (bootstrap != NULL) {
+    duk_compile_file(ctx, 0, bootstrap);
+    duk_call(ctx, 0);
+  }
+
   // require.call({id:uv.cwd()+"/main.c"}, path);
   duk_push_c_function(ctx, duv_require, 1);
   {
@@ -425,6 +431,7 @@ static duk_ret_t duv_main(duk_context *ctx) {
   duk_push_object(ctx);
   duk_push_c_function(ctx, duv_cwd, 0);
   duk_call(ctx, 0);
+
   duk_push_string(ctx, "/main.c");
   duk_concat(ctx, 2);
   duk_put_prop_string(ctx, -2, "id");
@@ -438,12 +445,24 @@ static duk_ret_t duv_main(duk_context *ctx) {
 
 int main(int argc, char *argv[]) {
   duk_context *ctx = NULL;
+  int opt;
+  //char *bootstrap = NULL;
+
   uv_loop_init(&loop);
 
   uv_setup_args(argc, argv);
 
-  if (argc < 2) {
-    fprintf(stderr, "Usage: dukluv script.js\n");
+  opt = getopt(argc, argv, "b:");
+
+  if (opt == 'b') {
+    bootstrap = optarg;
+  } else if (opt == '?' && optopt == 'b') {
+    fprintf(stderr, "expected bootstrap\n");
+    exit(1);
+  }
+
+  if (argc < 2 || argc == optind) {
+    fprintf(stderr, "Usage: dukluv [-b bootstrap] script.js\n");
     exit(1);
   }
 
@@ -456,7 +475,7 @@ int main(int argc, char *argv[]) {
   loop.data = ctx;
 
   duk_push_c_function(ctx, duv_main, 1);
-  duk_push_string(ctx, argv[1]);
+  duk_push_string(ctx, argv[optind]);
   if (duk_pcall(ctx, 1)) {
     fprintf(stderr, "\nUncaught Exception:\n");
     if (duk_is_object(ctx, -1)) {
