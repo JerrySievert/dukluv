@@ -412,11 +412,6 @@ static duk_ret_t duv_main(duk_context *ctx) {
   duk_push_c_function(ctx, duv_loadfile, 1);
   duk_put_prop_string(ctx, -2, "loadFile");
 
-  if (bootstrap != NULL) {
-    duk_compile_file(ctx, 0, bootstrap);
-    duk_call(ctx, 0);
-  }
-
   // require.call({id:uv.cwd()+"/main.c"}, path);
   duk_push_c_function(ctx, duv_require, 1);
   {
@@ -431,6 +426,11 @@ static duk_ret_t duv_main(duk_context *ctx) {
   duk_push_object(ctx);
   duk_push_c_function(ctx, duv_cwd, 0);
   duk_call(ctx, 0);
+
+  if (bootstrap != NULL) {
+    duk_eval_file_noresult(ctx, bootstrap);
+  }
+
 
   duk_push_string(ctx, "/main.c");
   duk_concat(ctx, 2);
